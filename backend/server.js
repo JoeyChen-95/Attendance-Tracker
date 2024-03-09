@@ -24,7 +24,7 @@ app.all("*", function (req, res, next) {
 });
 
 const corsOptions = {
-  origin: "http://localhost:3000", // This should be the domain of your frontend application
+  origin: ["http://127.0.0.1:3000", "http://3.88.9.11:3000"], // This should be the domain of your frontend application
   credentials: true, // This sets Access-Control-Allow-Credentials to true.
   methods: "PUT,POST,GET,DELETE,OPTIONS",
 };
