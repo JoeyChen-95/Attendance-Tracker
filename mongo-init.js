@@ -59,6 +59,7 @@ db.classes.insertMany([
     topic: "Introduction to Databases",
     attendance: [{ student: aliceId, attends: false }],
     active: true,
+    secretCode: "sql123",
   },
   {
     course: databaseSystemId, // Use ObjectId
@@ -66,5 +67,6 @@ db.classes.insertMany([
     topic: "SQL Basics",
     attendance: [{ student: aliceId, attends: false }],
     active: true,
+    secretCode: "sql456",
   },
 ]);

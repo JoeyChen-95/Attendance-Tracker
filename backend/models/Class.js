@@ -11,7 +11,8 @@ const ClassSchema = new Schema({
       attends: { type: Boolean, required: true },
     },
   ],
-  active: { type: Boolean, required: true, default: true }, // Added 'active' field
+  active: { type: Boolean, required: true, default: true },
+  secretCode: { type: String, required: true },
 });
 
 module.exports = mongoose.model("Class", ClassSchema);

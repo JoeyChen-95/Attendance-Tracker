@@ -28,15 +28,16 @@ const WelcomeBanner = () => {
   if (!user)
     return (
       <div>
-        Welcome users, please login!<button onClick={handleLogout}>Home</button>{" "}
+        Welcome users, please login!{" "}
+        <button onClick={handleLogout}>Home</button>{" "}
       </div>
     );
 
   return (
     <div>
-      Welcome, {user.name}!
+      Welcome, {user.name}!{" "}
       <Link to="/registered-courses">Go to My Courses</Link>
-      <button onClick={handleLogout}>Logout</button> {/* Logout button */}
+      <button onClick={handleLogout}>Logout</button>
     </div>
   );
 };

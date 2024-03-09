@@ -30,8 +30,6 @@ app.use(cors(corsOptions));
 
 app.use(express.json());
 
-const username = "rootuser";
-const password = encodeURIComponent("rootpass");
 const mongo_db_name = "attendance-checker-db";
 const mongoDbUrl = `mongodb://${mongo_host}:27017/${mongo_db_name}`;
 
@@ -396,12 +394,18 @@ app.get(
 
 app.post("/api/classes/:classId/attendance/:studentId", async (req, res) => {
   const { classId, studentId } = req.params;
+  const { secretCode } = req.body; // Assuming the secretCode is sent in the request body
 
   try {
     // Find the class and ensure it exists
     const classData = await Class.findById(classId);
     if (!classData) {
       return res.status(404).json({ message: "Class not found" });
+    }
+
+    // Verify the secret code
+    if (classData.secretCode !== secretCode) {
+      return res.status(403).json({ message: "Invalid secret code" });
     }
 
     // Check if the student is registered in the class's attendance
@@ -414,6 +418,13 @@ app.post("/api/classes/:classId/attendance/:studentId", async (req, res) => {
       return res
         .status(404)
         .json({ message: "Student not registered for this class" });
+    }
+
+    // Check if the student has already marked attendance
+    if (classData.attendance[studentAttendanceIndex].attends) {
+      return res
+        .status(400)
+        .json({ message: "Attendance already marked as true" });
     }
 
     // Set attendance to true for the student
@@ -511,7 +522,7 @@ app.get("/api/courses/:courseId/classes", async (req, res) => {
 
 app.post("/api/classes", async (req, res) => {
   try {
-    const { course, topic } = req.body;
+    const { course, topic, secretCode } = req.body;
 
     // Validate course ID and retrieve registered students
     const courseData = await Course.findById(course).populate("students");
@@ -532,6 +543,7 @@ app.post("/api/classes", async (req, res) => {
       date, // Set to current time
       topic,
       attendance,
+      secretCode,
     });
     await newClass.save();
     res.status(201).json(newClass);
@@ -565,21 +577,21 @@ app.get("/api/classes/:id", async (req, res) => {
 
 app.put("/api/classes/:id", async (req, res) => {
   try {
-    const { course, topic } = req.body;
+    const { course, topic, secretCode } = req.body; // Destructure secretCode from the request body
     let updateData = { topic };
 
+    // Only update the course field if it's provided
     if (course) {
-      const courseExists = await Course.findById(course).populate("students");
-      if (!courseExists)
+      const courseExists = await Course.findById(course);
+      if (!courseExists) {
         return res.status(404).json({ message: "Course not found" });
-
+      }
       updateData.course = course;
+    }
 
-      // Update attendance records to include all current students with 'false' status
-      updateData.attendance = courseExists.students.map((student) => ({
-        student: student._id,
-        attends: false,
-      }));
+    // Update the secret code if provided
+    if (secretCode) {
+      updateData.secretCode = secretCode;
     }
 
     const updatedClass = await Class.findByIdAndUpdate(
@@ -587,8 +599,10 @@ app.put("/api/classes/:id", async (req, res) => {
       updateData,
       { new: true }
     );
-    if (!updatedClass)
+    if (!updatedClass) {
       return res.status(404).json({ message: "Class not found" });
+    }
+
     res.json(updatedClass);
   } catch (error) {
     res.status(400).json({ message: error.message });

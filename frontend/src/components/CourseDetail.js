@@ -9,6 +9,7 @@ function CourseDetail() {
   const [course, setCourse] = useState(null);
   const [classes, setClasses] = useState([]);
   const [newClassTopic, setNewClassTopic] = useState("");
+  const [secretCode, setSecretCode] = useState("");
 
   const fetchCourseDetailsAndClasses = useCallback(async () => {
     try {
@@ -43,11 +44,16 @@ function CourseDetail() {
           "Content-Type": "application/json",
           // Authorization header if needed
         },
-        body: JSON.stringify({ course: courseId, topic: newClassTopic }),
+        body: JSON.stringify({
+          course: courseId,
+          topic: newClassTopic,
+          secretCode: secretCode,
+        }),
       });
       if (!response.ok) throw new Error("Failed to create class");
       // Refresh classes list after creation
       setNewClassTopic(""); // Reset the input field
+      setSecretCode(""); // Reset the secret code input field
       fetchCourseDetailsAndClasses();
     } catch (error) {
       console.error("Error creating class:", error);
@@ -70,6 +76,36 @@ function CourseDetail() {
     }
   };
 
+  const handleUpdateCourseDescription = async () => {
+    const newDescription = window.prompt(
+      "Enter the new course description:",
+      course.description
+    );
+    if (newDescription !== null && newDescription !== course.description) {
+      try {
+        const response = await fetch(`${apiBaseUrl}/api/courses/${courseId}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            description: newDescription,
+          }),
+        });
+
+        if (!response.ok)
+          throw new Error("Failed to update course description");
+
+        const updatedCourse = await response.json();
+        setCourse(updatedCourse); // Update the local state to reflect the new course description
+        alert("Course description updated successfully");
+      } catch (error) {
+        console.error("Error updating course description:", error);
+        alert("Failed to update course description");
+      }
+    }
+  };
+
   useEffect(() => {
     if (user && user.userId) {
       fetchCourseDetailsAndClasses();
@@ -84,6 +120,13 @@ function CourseDetail() {
       <p>Course ID: {courseId}</p>
       <p>Course Description: {course.description}</p>
       {user.role === "instructor" && (
+        <>
+          <button onClick={handleUpdateCourseDescription}>
+            Update Course Description
+          </button>
+        </>
+      )}
+      {user.role === "instructor" && (
         <div>
           <h3>Create a New Class</h3>
           <form onSubmit={handleCreateClass}>
@@ -92,6 +135,13 @@ function CourseDetail() {
               value={newClassTopic}
               onChange={(e) => setNewClassTopic(e.target.value)}
               placeholder="Class Topic"
+              required
+            />
+            <input
+              type="text"
+              value={secretCode}
+              onChange={(e) => setSecretCode(e.target.value)}
+              placeholder="Secret Code for this class"
               required
             />
             <button type="submit">Create Class</button>
