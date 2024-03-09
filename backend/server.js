@@ -1,18 +1,39 @@
 const express = require("express");
 const mongoose = require("mongoose");
-const app = express();
-const PORT = process.env.PORT || 8080;
 const User = require("./models/User");
 const Course = require("./models/Course");
 const Class = require("./models/Class");
 const session = require("express-session");
 const bcrypt = require("bcrypt");
 const MongoStore = require("connect-mongo");
+const cors = require("cors"); // Require cors package
+require("dotenv").config();
+const PORT = process.env.PORT || 8080;
+const mongo_host = process.env.MONGO_DB_HOST || "localhost";
+
+const app = express();
+
+app.all("*", function (req, res, next) {
+  res.header("Access-Control-Allow-Origin", "http://127.0.0.1:3000"); //前端域名
+  res.header("Access-Control-Allow-Credentials", "true");
+  res.header("Access-Control-Allow-Methods", "PUT,POST,GET,DELETE,OPTIONS");
+  next();
+});
+
+const corsOptions = {
+  origin: "http://localhost:3000", // This should be the domain of your frontend application
+  credentials: true, // This sets Access-Control-Allow-Credentials to true.
+  methods: "PUT,POST,GET,DELETE,OPTIONS",
+};
+
+app.use(cors(corsOptions));
 
 app.use(express.json());
 
+const username = "rootuser";
+const password = encodeURIComponent("rootpass");
 const mongo_db_name = "attendance-checker-db";
-const mongoDbUrl = `mongodb://localhost:27017/${mongo_db_name}`;
+const mongoDbUrl = `mongodb://${mongo_host}:27017/${mongo_db_name}`;
 
 // MongoDB connection
 mongoose
@@ -20,16 +41,24 @@ mongoose
     useNewUrlParser: true,
     useUnifiedTopology: true,
   })
-  .then(() => console.log(`MongoDB connected, database name: ${mongo_db_name}`))
+  .then(() =>
+    console.log(
+      `MongoDB connected, database url: ${mongoDbUrl}, database name: ${mongo_db_name}`
+    )
+  )
   .catch((err) => console.log(err));
 
 app.use(
   session({
-    secret: "abcdefg",
-    resave: false,
-    saveUninitialized: true,
-    store: MongoStore.create({ mongoUrl: mongoDbUrl }),
-    cookie: { maxAge: 60000 * 5 }, // Session expires after 30 minutes of inactivity
+    secret: "abcdefg", // Use a secret for signing the session ID cookie
+    resave: false, // Avoid resaving sessions that haven't been modified
+    saveUninitialized: false, // Don't create a session until something is stored
+    store: MongoStore.create({ mongoUrl: mongoDbUrl }), // Use MongoStore to store session in the database
+    cookie: {
+      secure: false, // Set secure to true if using https
+      httpOnly: true, // Reduce XSS attack vector by not allowing cookies to be accessed through client-side scripts
+      maxAge: 1000 * 60 * 60 * 24, // Example for setting cookie to expire after one day
+    },
   })
 );
 
@@ -46,15 +75,14 @@ app.listen(PORT, () => {
  */
 
 app.post("/api/login", async (req, res) => {
-  const { userId, password } = req.body;
+  const { email, password } = req.body; // Use email instead of userId
+  let user = null;
 
   try {
-    const user = await User.findById(userId);
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
+    user = await User.findOne({ email: email }); // Find user by email
 
-    const isMatch = password === user.password;
+    const isMatch = password === user.password; // This is insecure, just placeholder for demonstration
+
     if (!isMatch) {
       return res.status(400).json({ message: "Invalid credentials" });
     }
@@ -62,8 +90,17 @@ app.post("/api/login", async (req, res) => {
     // Store user's ID in session
     req.session.userId = user._id;
 
-    res.json({ message: "Login successful" });
+    res.json({
+      message: "Login successful",
+      userId: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+    });
   } catch (error) {
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
     res.status(500).json({ message: error.message });
   }
 });
@@ -81,14 +118,16 @@ app.get("/api/logout", (req, res) => {
 app.get("/api/current-user", async (req, res) => {
   if (req.session.userId) {
     try {
-      // Use the User model to find the user by ID stored in session
       const user = await User.findById(req.session.userId);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
-      // Prepare and send a response with user information
-      // Make sure to exclude sensitive information such as password
-      const { password, ...userInfo } = user.toObject();
+      // Deconstruct the user object to separate _id and password from the rest
+      const { _id, password, ...rest } = user.toObject();
+
+      // Construct userInfo with _id renamed to userId
+      const userInfo = { userId: _id, ...rest };
+
       res.json(userInfo);
     } catch (error) {
       console.error(error);
@@ -222,6 +261,76 @@ app.delete("/api/users/:id", async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
+
+/**
+ * Instructor API
+ */
+
+app.get("/api/instructors/:instructorId", async (req, res) => {
+  try {
+    const user = await User.findById(req.params.instructorId);
+    if (!user) return res.status(404).json({ message: "Instructor not found" });
+    if (user.role !== "instructor")
+      return res.status(404).json({ message: "The user is not instructor" });
+    res.json(user);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+app.get("/api/instructors/:instructorId/courses", async (req, res) => {
+  const { instructorId } = req.params;
+  try {
+    // Validate if the student exists
+    const instructorExists = await User.findById(instructorId);
+    if (!instructorExists || instructorExists.role !== "instructor") {
+      return res.status(404).json({ message: "Instructor not found" });
+    }
+
+    // Find all courses where this student is registered
+    const courses = await Course.find({ instructor: instructorId });
+    res.json(courses);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+});
+
+app.post(
+  "/api/classes/:classId/toggle_attendance/:studentId",
+  async (req, res) => {
+    const { classId, studentId } = req.params;
+
+    try {
+      // Find the class document
+      const classDoc = await Class.findById(classId);
+      if (!classDoc) {
+        return res.status(404).json({ message: "Class not found" });
+      }
+
+      // Check if the student is in the attendance list
+      const attendanceIndex = classDoc.attendance.findIndex(
+        (att) => att.student.toString() === studentId
+      );
+
+      if (attendanceIndex === -1) {
+        // If student not found in the attendance list, add them with attendance toggled
+        classDoc.attendance.push({ student: studentId, attends: true });
+      } else {
+        // If student found, toggle their attendance status
+        classDoc.attendance[attendanceIndex].attends =
+          !classDoc.attendance[attendanceIndex].attends;
+      }
+
+      // Save the updated class document
+      await classDoc.save();
+
+      res.json({ message: "Attendance toggled successfully", class: classDoc });
+    } catch (error) {
+      console.error("Error toggling attendance:", error);
+      res.status(500).json({ message: "Server error" });
+    }
+  }
+);
 
 /**
  * Student API
@@ -383,6 +492,19 @@ app.delete("/api/courses/:id", async (req, res) => {
   }
 });
 
+// Get all classes under a course
+
+app.get("/api/courses/:courseId/classes", async (req, res) => {
+  try {
+    const { courseId } = req.params;
+    const classes = await Class.find({ course: courseId });
+    res.json(classes);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 /**
  * Class API
  */
@@ -480,5 +602,28 @@ app.delete("/api/classes/:id", async (req, res) => {
     res.json({ message: "Class deleted successfully" });
   } catch (error) {
     res.status(500).json({ message: error.message });
+  }
+});
+
+app.post("/api/classes/:classId/toggle-active", async (req, res) => {
+  const { classId } = req.params;
+
+  try {
+    // Find the class by ID
+    const classDoc = await Class.findById(classId);
+    if (!classDoc) {
+      return res.status(404).json({ message: "Class not found" });
+    }
+
+    // Toggle the active status
+    classDoc.active = !classDoc.active;
+
+    // Save the updated class
+    await classDoc.save();
+
+    res.json({ message: "Class active status toggled", class: classDoc });
+  } catch (error) {
+    console.error("Error toggling class active status:", error);
+    res.status(500).json({ message: "Server error" });
   }
 });

@@ -1,32 +1,41 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useUser } from "../context/UserContext";
+
+const apiBaseUrl = process.env.BACKEND_URL || "http://localhost:8080";
 
 function Login() {
-  const [userId, setUserId] = useState("");
+  const [email, setEmail] = useState(""); // Changed from userId to email
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const navigate = useNavigate();
+  const { setUser } = useUser();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(""); // Reset error message
 
     try {
-      const response = await fetch("/api/login", {
+      const response = await fetch(`${apiBaseUrl}/api/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ userId, password }),
+        // Update the body to use email instead of userId
+        body: JSON.stringify({ email, password }),
+        credentials: "include",
       });
 
       const data = await response.json();
+
       if (!response.ok) {
         setError(data.message || "An error occurred");
         return;
+      } else {
+        setUser(data); // Update the global user state
+        navigate("/registered-courses"); // Navigate to RegisteredCourses page
+        return;
       }
-
-      // Handle successful login here
-      // For example, save the logged-in user's info to the state, redirect, etc.
-      console.log("Login successful:", data);
     } catch (err) {
       setError("Failed to connect to the server");
     }
@@ -38,12 +47,12 @@ function Login() {
       {error && <p style={{ color: "red" }}>{error}</p>}
       <form onSubmit={handleSubmit}>
         <div>
-          <label htmlFor="userId">User ID:</label>
+          <label htmlFor="email">Email:</label> {/* Updated label */}
           <input
             type="text"
-            id="userId"
-            value={userId}
-            onChange={(e) => setUserId(e.target.value)}
+            id="email" // Updated id
+            value={email} // Updated value
+            onChange={(e) => setEmail(e.target.value)} // Updated onChange handler
           />
         </div>
         <div>
