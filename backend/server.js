@@ -16,7 +16,7 @@ const app = express();
 app.all("*", function (req, res, next) {
   res.header("Access-Control-Allow-Origin", [
     "http://127.0.0.1:3000",
-    "'http://3.88.9.11:3000",
+    "http://3.88.9.11:3000",
   ]); //前端域名
   res.header("Access-Control-Allow-Credentials", "true");
   res.header("Access-Control-Allow-Methods", "PUT,POST,GET,DELETE,OPTIONS");
