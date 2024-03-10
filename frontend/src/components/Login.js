@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useUser } from "../context/UserContext";
 require("dotenv").config();
 
-const apiBaseUrl = process.env.BACKEND_URL || "http://localhost:8080";
+const apiBaseUrl = process.env.BACKEND_URL || "http://3.88.9.11:8080";
 
 function Login() {
   const [email, setEmail] = useState(""); // Changed from userId to email
